@@ -115,6 +115,113 @@ async function checkConcurrency() {
     assert.equal(ledger.rows.length, 5);
 
     console.log("PASS: total ₹500 preserved, no overdraft, 5 ledger rows.");
+    // Test 3: force a failure after balance updates and a ledger insert.
+    const forcedFailure = new Error("Intentional rollback test");
+    const rollbackPaymentId = randomUUID();
+
+    await assert.rejects(
+      () =>
+        withTransaction(async (client) => {
+          await client.query(
+            `UPDATE accounts
+             SET balance_paise = balance_paise - 10000
+             WHERE id = $1`,
+            [receiverId],
+          );
+
+          await client.query(
+            `UPDATE accounts
+             SET balance_paise = balance_paise + 10000
+             WHERE id = $1`,
+            [senderId],
+          );
+
+          await client.query(
+            `INSERT INTO transactions (
+               payment_id, sender_account_id,
+               receiver_account_id, amount_paise
+             )
+             VALUES ($1, $2, $3, 10000)`,
+            [rollbackPaymentId, receiverId, senderId],
+          );
+
+          throw forcedFailure;
+        }),
+      (error: unknown) => error === forcedFailure,
+    );
+
+    const afterRollback = await pool.query<{
+      id: string;
+      balance_paise: string;
+    }>(
+      "SELECT id, balance_paise FROM accounts WHERE id IN ($1, $2)",
+      [senderId, receiverId],
+    );
+
+    assert.equal(
+      afterRollback.rows.find((row) => row.id === senderId)?.balance_paise,
+      "0",
+    );
+
+    assert.equal(
+      afterRollback.rows.find((row) => row.id === receiverId)?.balance_paise,
+      "50000",
+    );
+
+    const rolledBackPayment = await pool.query(
+      "SELECT id FROM transactions WHERE payment_id = $1",
+      [rollbackPaymentId],
+    );
+
+    assert.equal(rolledBackPayment.rows.length, 0);
+
+    console.log("PASS: forced failure rolled back balances and ledger.");
+
+    // Prepare only the temporary accounts: ₹250 each.
+    await pool.query(
+      `UPDATE accounts
+       SET balance_paise = 25000
+       WHERE id IN ($1, $2)`,
+      [senderId, receiverId],
+    );
+
+    // Test 4: twenty ₹1 payments in each direction.
+    const oppositePayments = await completeAll(
+      Array.from({ length: 40 }, (_, index) =>
+        settle({
+          paymentId: randomUUID(),
+          senderAccountId: index % 2 === 0 ? senderId : receiverId,
+          receiverAccountId: index % 2 === 0 ? receiverId : senderId,
+          amountPaise: 100n,
+        }),
+      ),
+    );
+
+    assert.equal(
+      oppositePayments.filter((result) => result.status === "SETTLED").length,
+      40,
+    );
+
+    const finalAccounts = await pool.query<{ balance_paise: string }>(
+      "SELECT balance_paise FROM accounts WHERE id IN ($1, $2)",
+      [senderId, receiverId],
+    );
+
+    assert.equal(finalAccounts.rows.length, 2);
+
+    for (const account of finalAccounts.rows) {
+      assert.equal(account.balance_paise, "25000");
+    }
+
+    const finalLedger = await pool.query(
+      `SELECT id FROM transactions
+       WHERE sender_account_id IN ($1, $2)`,
+      [senderId, receiverId],
+    );
+
+    assert.equal(finalLedger.rows.length, 45);
+
+    console.log("PASS: 40 opposite-direction payments settled correctly.");
   } finally {
     // Remove only this run's temporary data.
     await withTransaction(async (client) => {
