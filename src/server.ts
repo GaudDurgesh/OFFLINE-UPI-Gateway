@@ -1,7 +1,6 @@
 import app from "./app.js";
+import { config } from "./config.js";
 
-const PORT = 8080;
-
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+app.listen(config.PORT, () => {
+  console.log(`Server running at http://localhost:${config.PORT}`);
 });
