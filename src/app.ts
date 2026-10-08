@@ -1,5 +1,6 @@
 import express from "express";
 import { pool } from "./db/pool.js";
+import { bridgeAuth } from "./middleware/bridge-auth.js";
 
 const app = express();
 
@@ -23,6 +24,15 @@ app.get("/health", async (_req, res) => {
       database: "unavailable",
     });
   }
+});
+
+app.get("/api/bridge/me", bridgeAuth, (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+
+  res.status(200).json({
+    bridgeId: res.locals.bridge.id,
+    name: res.locals.bridge.name,
+  });
 });
 
 export default app;

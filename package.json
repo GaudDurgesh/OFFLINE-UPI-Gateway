@@ -20,7 +20,9 @@
     "check:packet": "tsx src/scripts/check-packet.ts",
     "check:packet-validation": "tsx src/scripts/check-packet-validation.ts",
     "check:packet-store": "tsx src/scripts/check-packet-store.ts",
-    "check:ingestion": "tsx src/scripts/check-ingestion.ts"
+    "check:ingestion": "tsx src/scripts/check-ingestion.ts",
+    "bridge:create": "tsx src/scripts/create-bridge.ts",
+    "check:bridge-auth": "tsx src/scripts/check-bridge-auth.ts"
   },
   "keywords": [],
   "author": "",
