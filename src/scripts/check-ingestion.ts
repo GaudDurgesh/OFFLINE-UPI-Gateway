@@ -8,6 +8,7 @@ import { generateDeviceKeyPair } from "../crypto/signature.js";
 import { validatePacket } from "../domain/packet.js";
 import type { MeshPacket } from "../domain/packet.js";
 import { buildPacket } from "../services/build-packet.js";
+import { settle } from "../services/settlement.js";
 import { ingestPacket } from "../services/ingestion.js";
 
 async function checkIngestion() {
@@ -289,9 +290,157 @@ async function checkIngestion() {
         assert.equal(finalLedger.rows.length, 1);
 
         console.log("PASS: rejected packets left balances and ledger unchanged.");
+        // Reactivate only this temporary device for the remaining checks.
+        await pool.query(
+            "UPDATE devices SET status = 'active' WHERE id = $1",
+            [deviceId],
+        );
+
+        // Higher counter arrives first. Both instructions should settle.
+        const higher = await deliver(
+            buildCase({ counter: "100", amountPaise: "100" }),
+        );
+
+        const lower = await deliver(
+            buildCase({ counter: "99", amountPaise: "100" }),
+        );
+
+        assert.equal(higher.outcome.status, "SETTLED");
+        assert.equal(lower.outcome.status, "SETTLED");
+
+        console.log("PASS: counters 100 then 99 both settle.");
+
+        await expectFailure(
+            "counter reuse with a different payment rejected",
+            buildCase({ counter: "100", amountPaise: "100" }),
+            {
+                status: "INVALID",
+                reason: "PAYMENT_INTENT_CONFLICT",
+            },
+        );
+
+        await expectFailure(
+            "payment ID reuse with a different counter rejected",
+            buildCase({
+                paymentId: payment.paymentId,
+                counter: "101",
+            }),
+            {
+                status: "INVALID",
+                reason: "PAYMENT_INTENT_CONFLICT",
+            },
+        );
+
+        const beforeFunding = await pool.query<{
+            id: string;
+            balance_paise: string;
+        }>(
+            "SELECT id, balance_paise FROM accounts WHERE id IN ($1, $2)",
+            [senderId, receiverId],
+        );
+
+        assert.equal(
+            beforeFunding.rows.find((row) => row.id === senderId)?.balance_paise,
+            "39800",
+        );
+
+        assert.equal(
+            beforeFunding.rows.find((row) => row.id === receiverId)?.balance_paise,
+            "10200",
+        );
+
+        // Sender has ₹398. This new ₹400 instruction must be rejected.
+        const rejectedPayment = {
+            ...payment,
+            paymentId: randomUUID(),
+            counter: "200",
+            amountPaise: "40000",
+            signedAt: Date.now(),
+        };
+
+        const rejectedPacket = buildPacket(
+            rejectedPayment,
+            deviceKeys.privateKey,
+            serverKeys.publicKey,
+        );
+
+        await expectFailure(
+            "unaffordable payment recorded",
+            rejectedPacket,
+            {
+                status: "REJECTED",
+                reason: "INSUFFICIENT_FUNDS",
+            },
+        );
+
+        // Transfer ₹2 back through the internal settlement service.
+        // The sender now has enough money for that rejected instruction.
+        const funding = await settle({
+            paymentId: randomUUID(),
+            senderAccountId: receiverId,
+            receiverAccountId: senderId,
+            amountPaise: 200n,
+        });
+
+        assert.equal(funding.status, "SETTLED");
+
+        const reencryptedPacket = buildPacket(
+            rejectedPayment,
+            deviceKeys.privateKey,
+            serverKeys.publicKey,
+        );
+
+        assert.notEqual(
+            reencryptedPacket.ciphertext,
+            rejectedPacket.ciphertext,
+        );
+
+        const retriedRejection = await deliver(reencryptedPacket);
+
+        assert.equal(retriedRejection.repeated, false);
+        assert.deepEqual(retriedRejection.outcome, {
+            status: "REJECTED",
+            reason: "INSUFFICIENT_FUNDS",
+        });
+
+        console.log("PASS: re-encrypted rejection stays rejected after funding.");
+
+        const endingAccounts = await pool.query<{
+            id: string;
+            balance_paise: string;
+        }>(
+            "SELECT id, balance_paise FROM accounts WHERE id IN ($1, $2)",
+            [senderId, receiverId],
+        );
+
+        assert.equal(
+            endingAccounts.rows.find((row) => row.id === senderId)?.balance_paise,
+            "40000",
+        );
+
+        assert.equal(
+            endingAccounts.rows.find((row) => row.id === receiverId)?.balance_paise,
+            "10000",
+        );
+
+        const endingLedger = await pool.query(
+            `SELECT id FROM transactions
+       WHERE sender_account_id IN ($1, $2)
+          OR receiver_account_id IN ($1, $2)`,
+            [senderId, receiverId],
+        );
+
+        // Original payment + two out-of-order payments + funding transfer.
+        assert.equal(endingLedger.rows.length, 4);
+
+        console.log("PASS: replay checks preserved balances and ledger count.");
     } finally {
         await withTransaction(async (client) => {
             // Packet records reference transactions, so remove them first.
+            await client.query(
+                "DELETE FROM payment_intents WHERE device_id = $1",
+                [deviceId],
+            );
             await client.query(
                 "DELETE FROM packets WHERE packet_hash = ANY($1::text[])",
                 [[...packetHashes]],

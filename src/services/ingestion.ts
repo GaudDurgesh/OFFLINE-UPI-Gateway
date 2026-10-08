@@ -8,133 +8,144 @@ import { paymentSchema } from "../domain/payment.js";
 import { verifyPayment } from "./verify-payment.js";
 import { settleInTransaction } from "./settlement.js";
 import { claimPacket, finishPacket } from "./packet-store.js";
+import { claimPaymentIntent } from "./payment-intents.js";
 import type { PacketOutcome } from "./packet-store.js";
 
 const signedPaymentSchema = z
-  .object({
-    payment: paymentSchema,
-    signature: z.string().length(88),
-  })
-  .strict();
+    .object({
+        payment: paymentSchema,
+        signature: z.string().length(88),
+    })
+    .strict();
 
 const FUTURE_CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 type IngestResult = {
-  packetHash: string | null;
-  repeated: boolean;
-  outcome: PacketOutcome;
+    packetHash: string | null;
+    repeated: boolean;
+    outcome: PacketOutcome;
 };
 
 export async function ingestPacket(
-  input: unknown,
-  serverPrivateKey: KeyObject,
+    input: unknown,
+    serverPrivateKey: KeyObject,
 ): Promise<IngestResult> {
-  const receivedAt = Date.now();
-  const validated = validatePacket(input);
+    const receivedAt = Date.now();
+    const validated = validatePacket(input);
 
-  if (!validated.ok) {
-    return {
-      packetHash: null,
-      repeated: false,
-      outcome: {
-        status: "INVALID",
-        reason: "INVALID_PACKET",
-      },
-    };
-  }
-
-  const { packet, packetHash } = validated;
-
-  return withTransaction<IngestResult>(async (client) => {
-    const claim = await claimPacket(client, packetHash);
-
-    if (!claim.claimed) {
-      return {
-        packetHash,
-        repeated: true,
-        outcome: claim.outcome,
-      };
+    if (!validated.ok) {
+        return {
+            packetHash: null,
+            repeated: false,
+            outcome: {
+                status: "INVALID",
+                reason: "INVALID_PACKET",
+            },
+        };
     }
 
-    async function complete(
-      outcome: PacketOutcome,
-    ): Promise<IngestResult> {
-      await finishPacket(client, packetHash, outcome);
+    const { packet, packetHash } = validated;
 
-      return {
-        packetHash,
-        repeated: false,
-        outcome,
-      };
-    }
+    return withTransaction<IngestResult>(async (client) => {
+        const claim = await claimPacket(client, packetHash);
 
-    const decrypted = decryptPacket(
-      packet.ciphertext,
-      serverPrivateKey,
-    );
+        if (!claim.claimed) {
+            return {
+                packetHash,
+                repeated: true,
+                outcome: claim.outcome,
+            };
+        }
 
-    if (!decrypted.ok) {
-      return complete({
-        status: "INVALID",
-        reason: "DECRYPTION_FAILED",
-      });
-    }
+        async function complete(
+            outcome: PacketOutcome,
+        ): Promise<IngestResult> {
+            await finishPacket(client, packetHash, outcome);
 
-    let decoded: unknown;
+            return {
+                packetHash,
+                repeated: false,
+                outcome,
+            };
+        }
 
-    try {
-      decoded = JSON.parse(decrypted.plaintext.toString("utf8"));
-    } catch {
-      return complete({
-        status: "INVALID",
-        reason: "INVALID_JSON",
-      });
-    }
+        const decrypted = decryptPacket(
+            packet.ciphertext,
+            serverPrivateKey,
+        );
 
-    const envelope = signedPaymentSchema.safeParse(decoded);
+        if (!decrypted.ok) {
+            return complete({
+                status: "INVALID",
+                reason: "DECRYPTION_FAILED",
+            });
+        }
 
-    if (!envelope.success) {
-      return complete({
-        status: "INVALID",
-        reason: "INVALID_ENVELOPE",
-      });
-    }
+        let decoded: unknown;
 
-    const verified = await verifyPayment(
-      client,
-      envelope.data.payment,
-      envelope.data.signature,
-    );
+        try {
+            decoded = JSON.parse(decrypted.plaintext.toString("utf8"));
+        } catch {
+            return complete({
+                status: "INVALID",
+                reason: "INVALID_JSON",
+            });
+        }
 
-    if (verified.status === "INVALID") {
-      return complete(verified);
-    }
+        const envelope = signedPaymentSchema.safeParse(decoded);
 
-    const payment = verified.payment;
-    const ageMs = receivedAt - payment.signedAt;
-    const maxAgeMs = config.PACKET_MAX_AGE_HOURS * 60 * 60 * 1000;
+        if (!envelope.success) {
+            return complete({
+                status: "INVALID",
+                reason: "INVALID_ENVELOPE",
+            });
+        }
 
-    if (ageMs > maxAgeMs) {
-      return complete({
-        status: "INVALID",
-        reason: "STALE_PAYMENT",
-      });
-    }
+        const verified = await verifyPayment(
+            client,
+            envelope.data.payment,
+            envelope.data.signature,
+        );
 
-    if (ageMs < -FUTURE_CLOCK_SKEW_MS) {
-      return complete({
-        status: "INVALID",
-        reason: "FUTURE_DATED_PAYMENT",
-      });
-    }
+        if (verified.status === "INVALID") {
+            return complete(verified);
+        }
 
-    const settlement = await settleInTransaction(client, {
-      paymentId: payment.paymentId,
-      senderAccountId: payment.senderAccountId,
-      receiverAccountId: payment.receiverAccountId,
-      amountPaise: BigInt(payment.amountPaise),
+        const payment = verified.payment;
+        const ageMs = receivedAt - payment.signedAt;
+        const maxAgeMs = config.PACKET_MAX_AGE_HOURS * 60 * 60 * 1000;
+
+        if (ageMs > maxAgeMs) {
+            return complete({
+                status: "INVALID",
+                reason: "STALE_PAYMENT",
+            });
+        }
+
+        if (ageMs < -FUTURE_CLOCK_SKEW_MS) {
+            return complete({
+                status: "INVALID",
+                reason: "FUTURE_DATED_PAYMENT",
+            });
+        }
+
+        const intent = await claimPaymentIntent(
+            client,
+            payment,
+            packetHash,
+        );
+
+        if (!intent.claimed) {
+            return complete(intent.outcome);
+        }
+
+        const settlement = await settleInTransaction(client, {
+            paymentId: payment.paymentId,
+            senderAccountId: payment.senderAccountId,
+            receiverAccountId: payment.receiverAccountId,
+            amountPaise: BigInt(payment.amountPaise),
+        });
+
+        return complete(settlement);
     });
-
-    return complete(settlement);
-  });
 }
