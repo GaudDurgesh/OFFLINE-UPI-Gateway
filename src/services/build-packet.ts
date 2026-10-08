@@ -3,13 +3,8 @@ import type { KeyObject } from "node:crypto";
 import { paymentSchema, encodePayment } from "../domain/payment.js";
 import { signMessage } from "../crypto/signature.js";
 import { encryptPacket } from "../crypto/hybrid.js";
+import type { MeshPacket } from "../domain/packet.js";
 
-export type MeshPacket = {
-  packetId: string;
-  ttl: number;
-  createdAt: number;
-  ciphertext: string;
-};
 
 export function buildPacket(
   input: unknown,

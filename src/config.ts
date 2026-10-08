@@ -24,6 +24,13 @@ const envSchema = z.object({
         .max(10000)
         .default(2000),
 
+    PACKET_MAX_AGE_HOURS: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(168)
+        .default(24),
+
     PORT: z.coerce.number().int().min(1).max(65535).default(8080),
 
     NODE_ENV: z

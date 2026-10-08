@@ -17,7 +17,10 @@
     "check:devices": "tsx src/scripts/check-device-verification.ts",
     "keys:generate": "tsx src/scripts/generate-server-keys.ts",
     "check:encryption": "tsx src/scripts/check-encryption.ts",
-    "check:packet": "tsx src/scripts/check-packet.ts"
+    "check:packet": "tsx src/scripts/check-packet.ts",
+    "check:packet-validation": "tsx src/scripts/check-packet-validation.ts",
+    "check:packet-store": "tsx src/scripts/check-packet-store.ts",
+    "check:ingestion": "tsx src/scripts/check-ingestion.ts"
   },
   "keywords": [],
   "author": "",
