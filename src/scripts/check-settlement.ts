@@ -87,10 +87,7 @@ async function checkSettlement() {
 try {
   await checkSettlement();
 } catch (error) {
-  console.error(
-    "Settlement check failed:",
-    error instanceof Error ? error.message : "Unknown error",
-  );
+  console.error("Settlement check failed:", error);
   process.exitCode = 1;
 } finally {
   await pool.end();

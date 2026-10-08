@@ -17,6 +17,13 @@ const envSchema = z.object({
         .max(120000)
         .default(10000),
 
+    NETWORK_ATTEMPT_TIMEOUT_MS: z.coerce
+        .number()
+        .int()
+        .min(10)
+        .max(10000)
+        .default(2000),
+
     PORT: z.coerce.number().int().min(1).max(65535).default(8080),
 
     NODE_ENV: z

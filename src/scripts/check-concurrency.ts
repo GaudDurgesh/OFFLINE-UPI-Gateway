@@ -3,7 +3,10 @@ import { randomUUID } from "node:crypto";
 import { config } from "../config.js";
 import { pool } from "../db/pool.js";
 import { withTransaction } from "../db/tx.js";
-import { settle } from "../services/settlement.js";
+import {
+  settle,
+  settleInTransaction,
+} from "../services/settlement.js";
 
 // Wait for every request before inspecting results or cleaning up.
 async function completeAll<T>(requests: Promise<T>[]): Promise<T[]> {
@@ -122,28 +125,14 @@ async function checkConcurrency() {
     await assert.rejects(
       () =>
         withTransaction(async (client) => {
-          await client.query(
-            `UPDATE accounts
-             SET balance_paise = balance_paise - 10000
-             WHERE id = $1`,
-            [receiverId],
-          );
+          const result = await settleInTransaction(client, {
+            paymentId: rollbackPaymentId,
+            senderAccountId: receiverId,
+            receiverAccountId: senderId,
+            amountPaise: 10000n,
+          });
 
-          await client.query(
-            `UPDATE accounts
-             SET balance_paise = balance_paise + 10000
-             WHERE id = $1`,
-            [senderId],
-          );
-
-          await client.query(
-            `INSERT INTO transactions (
-               payment_id, sender_account_id,
-               receiver_account_id, amount_paise
-             )
-             VALUES ($1, $2, $3, 10000)`,
-            [rollbackPaymentId, receiverId, senderId],
-          );
+          assert.equal(result.status, "SETTLED");
 
           throw forcedFailure;
         }),

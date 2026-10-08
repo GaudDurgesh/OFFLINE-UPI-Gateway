@@ -1,7 +1,11 @@
 import pg from "pg";
+import { setDefaultAutoSelectFamilyAttemptTimeout } from "node:net";
 import { config } from "../config.js";
 
 const { Pool } = pg;
+setDefaultAutoSelectFamilyAttemptTimeout(
+    config.NETWORK_ATTEMPT_TIMEOUT_MS,
+);
 
 export const pool = new Pool({
     connectionString: config.DATABASE_URL,
