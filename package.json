@@ -14,7 +14,10 @@
     "check:concurrency": "tsx src/scripts/check-concurrency.ts",
     "check:signatures": "tsx src/scripts/check-signatures.ts",
     "check:payment": "tsx src/scripts/check-payment.ts",
-    "check:devices": "tsx src/scripts/check-device-verification.ts"
+    "check:devices": "tsx src/scripts/check-device-verification.ts",
+    "keys:generate": "tsx src/scripts/generate-server-keys.ts",
+    "check:encryption": "tsx src/scripts/check-encryption.ts",
+    "check:packet": "tsx src/scripts/check-packet.ts"
   },
   "keywords": [],
   "author": "",
