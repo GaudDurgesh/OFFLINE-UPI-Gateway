@@ -1,5 +1,25 @@
 import type { ErrorRequestHandler } from "express";
 
+const retryableCodes = new Set([
+  "40001", // Serialization failure
+  "40P01", // Deadlock
+  "55P03", // Lock unavailable / lock timeout
+  "57014", // Query cancelled, including statement timeout
+  "53300", // Too many database connections
+  "57P01", // Database shutting down
+  "57P02", // Database crash shutdown
+  "57P03", // Database cannot accept connections yet
+  "08001", // Unable to establish database connection
+  "08003", // Connection does not exist
+  "08006", // Connection failure
+  "08007", // Transaction outcome unknown
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "EPIPE",
+  "EAI_AGAIN",
+]);
+
 export const errorHandler: ErrorRequestHandler = (
   error: unknown,
   _req,
@@ -13,9 +33,9 @@ export const errorHandler: ErrorRequestHandler = (
 
   const type =
     typeof error === "object" &&
-    error !== null &&
-    "type" in error &&
-    typeof error.type === "string"
+      error !== null &&
+      "type" in error &&
+      typeof error.type === "string"
       ? error.type
       : undefined;
 
@@ -46,6 +66,24 @@ export const errorHandler: ErrorRequestHandler = (
   }
 
   // Do not log request bodies, credentials, or raw database errors.
+
+  const code =
+    typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      typeof error.code === "string"
+      ? error.code
+      : undefined;
+
+  if (code !== undefined && retryableCodes.has(code)) {
+    // Log only the recognized code, never the raw error.
+    console.warn(`Temporary request failure: ${code}`);
+
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Retry-After", "2");
+    res.status(503).json({ error: "SERVICE_UNAVAILABLE" });
+    return;
+  }
   console.error("Unhandled HTTP request error.");
   res.status(500).json({ error: "INTERNAL_ERROR" });
 };
