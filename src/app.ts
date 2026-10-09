@@ -9,6 +9,7 @@ import {
 import ingestionRouter from "./routes/ingestion.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import { requestId } from "./middleware/request-id.js";
+import type { RequestHandler } from "express";
 
 const app = express();
 
@@ -23,7 +24,17 @@ app.use("/api/bridge", (_req, res, next) => {
 
 app.use("/api/bridge", bridgeIpLimiter);
 
-app.get("/health", async (_req, res) => {
+app.get("/live", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.status(200).json({
+    status: "ok",
+    service: "offline-upi-system",
+  });
+});
+
+const readiness: RequestHandler = async (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+
   try {
     await pool.query("SELECT 1");
 
@@ -33,15 +44,22 @@ app.get("/health", async (_req, res) => {
       database: "connected",
     });
   } catch {
-    console.error("Database health check failed.");
+    console.warn(JSON.stringify({
+      event: "readiness_check_failed",
+      requestId: res.locals.requestId ?? null,
+    }));
 
+    res.setHeader("Retry-After", "2");
     res.status(503).json({
       status: "error",
       service: "offline-upi-system",
       database: "unavailable",
     });
   }
-});
+};
+
+app.get("/ready", readiness);
+app.get("/health", readiness);
 
 app.get(
   "/api/bridge/me",
