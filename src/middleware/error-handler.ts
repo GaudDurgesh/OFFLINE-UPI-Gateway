@@ -77,13 +77,20 @@ export const errorHandler: ErrorRequestHandler = (
 
   if (code !== undefined && retryableCodes.has(code)) {
     // Log only the recognized code, never the raw error.
-    console.warn(`Temporary request failure: ${code}`);
+    console.warn(JSON.stringify({
+      event: "temporary_request_failure",
+      requestId: res.locals.requestId ?? null,
+      code,
+    }));
 
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Retry-After", "2");
     res.status(503).json({ error: "SERVICE_UNAVAILABLE" });
     return;
   }
-  console.error("Unhandled HTTP request error.");
+  console.error(JSON.stringify({
+    event: "unhandled_request_error",
+    requestId: res.locals.requestId ?? null,
+  }));
   res.status(500).json({ error: "INTERNAL_ERROR" });
 };

@@ -8,9 +8,11 @@ import {
 } from "./middleware/rate-limit.js";
 import ingestionRouter from "./routes/ingestion.js";
 import { errorHandler } from "./middleware/error-handler.js";
+import { requestId } from "./middleware/request-id.js";
 
 const app = express();
 
+app.use(requestId);
 app.disable("x-powered-by");
 app.use(helmet());
 
