@@ -23,7 +23,8 @@
     "check:ingestion": "tsx src/scripts/check-ingestion.ts",
     "bridge:create": "tsx src/scripts/create-bridge.ts",
     "check:bridge-auth": "tsx src/scripts/check-bridge-auth.ts",
-    "check:ingestion-http": "CHECK_INGESTION_HTTP=1 tsx src/scripts/check-ingestion.ts"
+    "check:ingestion-http": "CHECK_INGESTION_HTTP=1 tsx src/scripts/check-ingestion.ts",
+    "check:concurrency-gate": "tsx src/scripts/check-concurrency-gate.ts"
   },
   "keywords": [],
   "author": "",

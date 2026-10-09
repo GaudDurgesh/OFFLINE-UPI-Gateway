@@ -2,10 +2,12 @@ import { Router, json } from "express";
 import { loadServerKeys } from "../crypto/server-keys.js";
 import { bridgeAuth } from "../middleware/bridge-auth.js";
 import { bridgeIdentityLimiter } from "../middleware/rate-limit.js";
+import { createConcurrencyGate } from "../services/concurrency-gate.js";
 import { ingestPacket } from "../services/ingestion.js";
 
 const router = Router();
 
+const ingestionGate = createConcurrencyGate(4);
 // Load and validate once at startup.
 // Missing or mismatched keys prevent the server from starting.
 const { privateKey } = await loadServerKeys();
@@ -28,12 +30,18 @@ router.post(
     inflate: false,
   }),
   async (req, res) => {
-    const result = await ingestPacket(req.body, privateKey);
+  const attempt = await ingestionGate.run(() =>
+    ingestPacket(req.body, privateKey),
+  );
 
-    // HTTP 200 means processing returned an outcome.
-    // The outcome determines whether the payment settled or was rejected.
-    res.status(200).json(result);
-  },
+  if (!attempt.accepted) {
+    res.setHeader("Retry-After", "1");
+    res.status(503).json({ error: "SERVICE_BUSY" });
+    return;
+  }
+
+  res.status(200).json(attempt.value);
+},
 );
 
 export default router;
