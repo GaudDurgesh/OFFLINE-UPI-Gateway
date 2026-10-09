@@ -24,7 +24,8 @@
     "bridge:create": "tsx src/scripts/create-bridge.ts",
     "check:bridge-auth": "tsx src/scripts/check-bridge-auth.ts",
     "check:ingestion-http": "CHECK_INGESTION_HTTP=1 tsx src/scripts/check-ingestion.ts",
-    "check:concurrency-gate": "tsx src/scripts/check-concurrency-gate.ts"
+    "check:concurrency-gate": "tsx src/scripts/check-concurrency-gate.ts",
+    "check:db-timeouts": "tsx src/scripts/check-db-timeouts.ts"
   },
   "keywords": [],
   "author": "",

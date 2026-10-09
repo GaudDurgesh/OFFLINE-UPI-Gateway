@@ -9,6 +9,11 @@ export async function withTransaction<T>(
 
   try {
     await client.query("BEGIN");
+    await client.query(`
+  SET LOCAL statement_timeout = '8s';
+  SET LOCAL lock_timeout = '3s';
+  SET LOCAL idle_in_transaction_session_timeout = '10s';
+`);
 
     const result = await work(client);
 
