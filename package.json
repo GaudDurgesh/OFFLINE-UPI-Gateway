@@ -26,7 +26,8 @@
     "check:ingestion-http": "CHECK_INGESTION_HTTP=1 tsx src/scripts/check-ingestion.ts",
     "check:concurrency-gate": "tsx src/scripts/check-concurrency-gate.ts",
     "check:db-timeouts": "tsx src/scripts/check-db-timeouts.ts",
-    "check:http-errors": "tsx src/scripts/check-http-errors.ts"
+    "check:http-errors": "tsx src/scripts/check-http-errors.ts",
+    "check:auth-overload": "tsx src/scripts/check-auth-overload.ts"
   },
   "keywords": [],
   "author": "",

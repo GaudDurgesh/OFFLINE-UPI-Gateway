@@ -1,10 +1,22 @@
 import app from "./app.js";
 import { config } from "./config.js";
 import { pool } from "./db/pool.js";
+import { createServer } from "node:http";
 
 const SHUTDOWN_TIMEOUT_MS = 30_000;
 
-const server = app.listen(config.PORT, () => {
+const server = createServer(
+  {
+    headersTimeout: 10_000,
+    requestTimeout: 30_000,
+    keepAliveTimeout: 5_000,
+    connectionsCheckingInterval: 1_000,
+    maxHeaderSize: 16 * 1024,
+  },
+  app,
+);
+
+server.listen(config.PORT, () => {
   console.log(`Server running at http://localhost:${config.PORT}`);
 });
 

@@ -1,7 +1,9 @@
 import type { RequestHandler } from "express";
 import { pool } from "../db/pool.js";
 import { hashBridgeKey, isBridgeKey } from "../crypto/bridge-keys.js";
+import { createConcurrencyGate } from "../services/concurrency-gate.js";
 
+const authenticationGate = createConcurrencyGate(4);
 type BridgeRow = {
   id: string;
   name: string;
@@ -22,16 +24,29 @@ export const bridgeAuth: RequestHandler = async (req, res, next) => {
   let bridge: BridgeRow | undefined;
 
   try {
-    const result = await pool.query<BridgeRow>(
-      `SELECT id, name, status
-       FROM bridge_nodes
-       WHERE api_key_hash = $1`,
-      [hashBridgeKey(apiKey)],
+    const attempt = await authenticationGate.run(() =>
+      pool.query<BridgeRow>(
+        `SELECT id, name, status
+     FROM bridge_nodes
+     WHERE api_key_hash = $1`,
+        [hashBridgeKey(apiKey)],
+      ),
     );
 
-    bridge = result.rows[0];
+    if (!attempt.accepted) {
+      res.setHeader("Retry-After", "1");
+      res.status(503).json({ error: "SERVICE_BUSY" });
+      return;
+    }
+
+    bridge = attempt.value.rows[0];
   } catch {
-    console.error("Bridge authentication database query failed.");
+    console.error(JSON.stringify({
+      event: "bridge_authentication_database_failure",
+      requestId: res.locals.requestId ?? null,
+    }));
+
+    res.setHeader("Retry-After", "2");
     res.status(503).json({ error: "SERVICE_UNAVAILABLE" });
     return;
   }
