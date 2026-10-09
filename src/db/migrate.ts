@@ -1,12 +1,37 @@
 import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pool } from "./pool.js";
+import { parseArgs } from "node:util";
 
 async function migrate() {
+  const { values } = parseArgs({
+    options: {
+      through: { type: "string" },
+    },
+    strict: true,
+    allowPositionals: false,
+  });
+
+  const through = values.through;
+
+  if (through !== undefined && !/^\d{3}$/.test(through)) {
+    throw new Error("--through must be a three-digit migration number.");
+  }
   const directory = resolve(process.cwd(), "migrations");
-  const files = (await readdir(directory))
+  const allFiles = (await readdir(directory))
     .filter((file) => /^\d{3}_[a-z0-9_]+\.sql$/.test(file))
     .sort();
+
+  if (
+    through !== undefined &&
+    !allFiles.some((file) => file.startsWith(`${through}_`))
+  ) {
+    throw new Error(`Migration ${through} does not exist.`);
+  }
+
+  const files = allFiles.filter(
+    (file) => through === undefined || file.slice(0, 3) <= through,
+  );
 
   if (files.length === 0) {
     throw new Error("No migration files found.");

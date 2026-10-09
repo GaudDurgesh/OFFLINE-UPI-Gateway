@@ -1,18 +1,46 @@
--- One-time provisioning for a fresh database.
--- Run as the database administrator after migrations 001–006
--- and before migration 007.
--- The role deliberately remains NOLOGIN until credential setup.
--- Do not rerun against an existing gateway_runtime role.
+-- Run as the database administrator after migrations 001–006.
+-- Creates the runtime role if missing and applies its required grants.
+-- Existing login credentials remain unchanged.
 
 BEGIN;
 
-CREATE ROLE gateway_runtime
-  NOLOGIN
-  NOSUPERUSER
-  NOCREATEDB
-  NOCREATEROLE
-  NOREPLICATION
-  NOBYPASSRLS;
+DO $block$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_roles WHERE rolname = 'gateway_runtime'
+  ) THEN
+    CREATE ROLE gateway_runtime
+      NOLOGIN
+      NOSUPERUSER
+      NOCREATEDB
+      NOCREATEROLE
+      NOREPLICATION
+      NOBYPASSRLS;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_roles
+    WHERE rolname = 'gateway_runtime'
+      AND (
+        rolsuper OR rolcreatedb OR rolcreaterole
+        OR rolreplication OR rolbypassrls
+      )
+  ) THEN
+    RAISE EXCEPTION 'gateway_runtime has unexpected administrative privileges';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_auth_members AS membership
+    JOIN pg_roles AS member_role
+      ON member_role.oid = membership.member
+    WHERE member_role.rolname = 'gateway_runtime'
+  ) THEN
+    RAISE EXCEPTION 'gateway_runtime has unexpected role memberships';
+  END IF;
+END;
+$block$;
 
 -- Grant access to the database where this script is executed.
 DO $block$
