@@ -29,7 +29,9 @@
     "check:http-errors": "tsx src/scripts/check-http-errors.ts",
     "check:auth-overload": "tsx src/scripts/check-auth-overload.ts",
     "db:setup-runtime": "tsx src/scripts/setup-runtime-login.ts",
-    "db:setup": "tsx src/scripts/setup-database.ts"
+    "db:setup": "tsx src/scripts/setup-database.ts",
+    "bridge:revoke": "tsx src/scripts/revoke-bridge.ts",
+    "bridge:rotate": "tsx src/scripts/rotate-bridge-key.ts"
   },
   "keywords": [],
   "author": "",
