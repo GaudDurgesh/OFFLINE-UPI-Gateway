@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "npm run typecheck && npm run check:signatures && npm run check:payment && npm run check:concurrency-gate && npm run check:http-errors",
     "dev": "node --env-file=.env.runtime --import tsx --watch src/server.ts",
     "build": "tsc",
     "start": "node --env-file=.env.runtime dist/server.js",
@@ -31,7 +31,12 @@
     "db:setup-runtime": "tsx src/scripts/setup-runtime-login.ts",
     "db:setup": "tsx src/scripts/setup-database.ts",
     "bridge:revoke": "tsx src/scripts/revoke-bridge.ts",
-    "bridge:rotate": "tsx src/scripts/rotate-bridge-key.ts"
+    "bridge:rotate": "tsx src/scripts/rotate-bridge-key.ts",
+    "test:crypto": "npm run check:encryption && npm run check:packet && npm run check:packet-validation",
+    "test:db": "npm run check:devices && npm run check:packet-store && npm run check:concurrency && npm run check:ingestion && npm run check:db-timeouts",
+    "test:http": "npm run check:bridge-auth && npm run check:ingestion-http && npm run check:bridge-lifecycle",
+    "check:bridge-lifecycle": "tsx src/scripts/check-bridge-lifecycle.ts",
+    "check:http-timeouts": "tsx src/scripts/check-http-timeouts.ts"
   },
   "keywords": [],
   "author": "",
