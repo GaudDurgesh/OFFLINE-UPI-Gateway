@@ -1,10 +1,23 @@
 import express from "express";
 import { pool } from "./db/pool.js";
 import { bridgeAuth } from "./middleware/bridge-auth.js";
+import helmet from "helmet";
+import {
+  bridgeIpLimiter,
+  bridgeIdentityLimiter,
+} from "./middleware/rate-limit.js";
 
 const app = express();
 
-app.use(express.json({ limit: "16kb" }));
+app.disable("x-powered-by");
+app.use(helmet());
+
+app.use("/api/bridge", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
+
+app.use("/api/bridge", bridgeIpLimiter);
 
 app.get("/health", async (_req, res) => {
   try {
@@ -26,13 +39,16 @@ app.get("/health", async (_req, res) => {
   }
 });
 
-app.get("/api/bridge/me", bridgeAuth, (_req, res) => {
-  res.setHeader("Cache-Control", "no-store");
-
-  res.status(200).json({
-    bridgeId: res.locals.bridge.id,
-    name: res.locals.bridge.name,
-  });
-});
+app.get(
+  "/api/bridge/me",
+  bridgeAuth,
+  bridgeIdentityLimiter,
+  (_req, res) => {
+    res.status(200).json({
+      bridgeId: res.locals.bridge.id,
+      name: res.locals.bridge.name,
+    });
+  },
+);
 
 export default app;
