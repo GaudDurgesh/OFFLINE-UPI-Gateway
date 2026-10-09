@@ -10,12 +10,29 @@ import type { MeshPacket } from "../domain/packet.js";
 import { buildPacket } from "../services/build-packet.js";
 import { settle } from "../services/settlement.js";
 import { ingestPacket } from "../services/ingestion.js";
+import { readFile } from "node:fs/promises";
 
 async function checkIngestion() {
     if (config.NODE_ENV !== "development") {
         throw new Error("This check is allowed only in development.");
     }
 
+    const useHttp = process.env.CHECK_INGESTION_HTTP === "1";
+    let bridgeApiKey = "";
+
+    if (useHttp) {
+        const credentials = JSON.parse(
+            await readFile(
+                ".keys/bridge-1a83556f-c931-4d72-96ca-1217577fbbf5.json",
+                "utf8",
+            ),
+        );
+
+        assert.equal(typeof credentials.apiKey, "string");
+        bridgeApiKey = credentials.apiKey;
+
+        console.log("Testing ingestion through HTTP.");
+    }
     const serverKeys = await loadServerKeys();
     const deviceKeys = generateDeviceKeyPair();
 
@@ -24,12 +41,45 @@ async function checkIngestion() {
     const deviceId = randomUUID();
     const packetHashes = new Set<string>();
 
-    async function deliver(packet: MeshPacket) {
+    async function deliver(
+        packet: MeshPacket,
+    ): Promise<Awaited<ReturnType<typeof ingestPacket>>> {
         const validated = validatePacket(packet);
         assert.ok(validated.ok);
 
         packetHashes.add(validated.packetHash);
-        return ingestPacket(packet, serverKeys.privateKey);
+
+        if (!useHttp) {
+            return ingestPacket(packet, serverKeys.privateKey);
+        }
+
+        const response = await fetch(
+            `http://127.0.0.1:${config.PORT}/api/bridge/ingest`,
+            {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${bridgeApiKey}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(packet),
+            },
+        );
+
+        assert.equal(response.status, 200, "Expected an ingestion outcome");
+        assert.equal(response.headers.get("cache-control"), "no-store");
+
+        const result = await response.json();
+
+        assert.equal(result.packetHash, validated.packetHash);
+        assert.equal(typeof result.repeated, "boolean");
+        assert.ok(
+            ["SETTLED", "DUPLICATE", "INVALID", "REJECTED"].includes(
+                result.outcome?.status,
+            ),
+            "Unexpected ingestion outcome",
+        );
+
+        return result;
     }
 
     try {

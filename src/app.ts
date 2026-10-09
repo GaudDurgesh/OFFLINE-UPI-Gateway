@@ -6,6 +6,8 @@ import {
   bridgeIpLimiter,
   bridgeIdentityLimiter,
 } from "./middleware/rate-limit.js";
+import ingestionRouter from "./routes/ingestion.js";
+import { errorHandler } from "./middleware/error-handler.js";
 
 const app = express();
 
@@ -50,5 +52,9 @@ app.get(
     });
   },
 );
+
+app.use("/api/bridge", ingestionRouter);
+
+app.use(errorHandler);
 
 export default app;
