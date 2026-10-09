@@ -4,9 +4,9 @@
   "description": "",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "tsx watch src/server.ts",
+    "dev": "node --env-file=.env.runtime --import tsx --watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js",
+    "start": "node --env-file=.env.runtime dist/server.js",
     "typecheck": "tsc --noEmit",
     "migrate": "tsx src/db/migrate.ts",
     "seed": "tsx src/db/seed.ts",
@@ -27,7 +27,8 @@
     "check:concurrency-gate": "tsx src/scripts/check-concurrency-gate.ts",
     "check:db-timeouts": "tsx src/scripts/check-db-timeouts.ts",
     "check:http-errors": "tsx src/scripts/check-http-errors.ts",
-    "check:auth-overload": "tsx src/scripts/check-auth-overload.ts"
+    "check:auth-overload": "tsx src/scripts/check-auth-overload.ts",
+    "db:setup-runtime": "tsx src/scripts/setup-runtime-login.ts"
   },
   "keywords": [],
   "author": "",

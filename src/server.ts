@@ -16,6 +16,24 @@ const server = createServer(
   app,
 );
 
+try {
+  const result = await pool.query<{ role_name: string }>(
+    "SELECT current_user AS role_name",
+  );
+
+  if (result.rows[0]?.role_name !== "gateway_runtime") {
+    throw new Error("Unexpected database role.");
+  }
+
+  console.log("Runtime database role verified.");
+} catch {
+  console.error(
+    "Server startup blocked: could not verify gateway_runtime database access.",
+  );
+  await pool.end();
+  process.exit(1);
+}
+
 server.listen(config.PORT, () => {
   console.log(`Server running at http://localhost:${config.PORT}`);
 });

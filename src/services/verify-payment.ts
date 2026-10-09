@@ -5,18 +5,18 @@ import { verifyMessage } from "../crypto/signature.js";
 
 type VerificationResult =
   | {
-      status: "VERIFIED";
-      payment: PaymentPayload;
-    }
+    status: "VERIFIED";
+    payment: PaymentPayload;
+  }
   | {
-      status: "INVALID";
-      reason:
-        | "INVALID_PAYLOAD"
-        | "INVALID_SIGNATURE"
-        | "UNKNOWN_DEVICE"
-        | "DEVICE_REVOKED"
-        | "DEVICE_ACCOUNT_MISMATCH";
-    };
+    status: "INVALID";
+    reason:
+    | "INVALID_PAYLOAD"
+    | "INVALID_SIGNATURE"
+    | "UNKNOWN_DEVICE"
+    | "DEVICE_REVOKED"
+    | "DEVICE_ACCOUNT_MISMATCH";
+  };
 
 type DeviceRow = {
   account_id: string;
@@ -44,9 +44,7 @@ export async function verifyPayment(
 
   const result = await client.query<DeviceRow>(
     `SELECT account_id, public_key_pem, status
-     FROM devices
-     WHERE id = $1
-     FOR SHARE`,
+   FROM public.get_device_for_verification($1::uuid)`,
     [payment.deviceId],
   );
 
