@@ -40,3 +40,59 @@ jobs:
 
       - name: Build TypeScript
         run: npm run build
+
+
+
+        
+  integration:
+    name: Crypto and database tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: baseline
+
+    env:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://setup_admin:ci-only-password@127.0.0.1:5432/gateway_ci?sslmode=disable
+      DB_CONNECTION_TIMEOUT_MS: "60000"
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: setup_admin
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: gateway_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U setup_admin -d gateway_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24.21.0"
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Generate temporary server keys
+        run: npm run keys:generate
+
+      - name: Set up fresh test database
+        run: npm run db:setup
+
+      - name: Run crypto tests
+        run: npm run test:crypto
+
+      - name: Run database tests
+        run: npm run test:db
