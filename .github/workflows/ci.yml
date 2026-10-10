@@ -38,6 +38,9 @@ jobs:
       - name: Run baseline tests
         run: npm test
 
+      - name: Run bridge queue and delivery tests
+        run: npm run test:bridge
+
       - name: Build TypeScript
         run: npm run build
 

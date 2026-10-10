@@ -37,7 +37,15 @@
     "test:http": "npm run check:bridge-auth && npm run check:ingestion-http && npm run check:bridge-lifecycle",
     "check:bridge-lifecycle": "tsx src/scripts/check-bridge-lifecycle.ts",
     "check:http-timeouts": "tsx src/scripts/check-http-timeouts.ts",
-    "ci:setup-http": "tsx src/scripts/setup-ci-http.ts"
+    "ci:setup-http": "tsx src/scripts/setup-ci-http.ts",
+    "check:outbox": "tsx src/scripts/check-outbox.ts",
+    "check:gateway-response": "tsx src/scripts/check-gateway-response.ts",
+    "check:gateway-client": "tsx src/scripts/check-gateway-client.ts",
+    "check:retry-policy": "tsx src/scripts/check-retry-policy.ts",
+    "check:outbox-retries": "tsx src/scripts/check-outbox-retries.ts",
+    "check:delivery-worker": "tsx src/scripts/check-delivery-worker.ts",
+    "check:bridge-delivery": "tsx src/scripts/check-bridge-delivery.ts",
+    "test:bridge": "npm run check:outbox && npm run check:gateway-response && npm run check:gateway-client && npm run check:retry-policy && npm run check:outbox-retries && npm run check:delivery-worker && npm run check:bridge-delivery"
   },
   "keywords": [],
   "author": "",
