@@ -41,9 +41,6 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
-
-
-        
   integration:
     name: Crypto and database tests
     runs-on: ubuntu-latest
@@ -96,3 +93,60 @@ jobs:
 
       - name: Run database tests
         run: npm run test:db
+
+      - name: Prepare HTTP test credentials
+        run: npm run ci:setup-http
+
+      - name: Build server for HTTP tests
+        run: npm run build
+
+      - name: Run HTTP tests with restricted database access
+        timeout-minutes: 5
+        env:
+          PORT: "8000"
+          TEST_BRIDGE_CREDENTIAL_FILE: .keys/ci-bridge.json
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          env -u DATABASE_URL node \
+            --env-file=.env.ci.runtime \
+            dist/server.js > gateway-ci-server.log 2>&1 &
+          server_pid=$!
+
+          cleanup() {
+            result=$?
+            kill "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+
+            if [ "$result" -ne 0 ]; then
+              cat gateway-ci-server.log
+            fi
+
+            return "$result"
+          }
+          trap cleanup EXIT
+
+          ready=false
+
+          for attempt in {1..30}; do
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              echo "Server exited before becoming ready."
+              exit 1
+            fi
+
+            if curl --fail --silent --max-time 2 \
+              http://127.0.0.1:8000/ready > /dev/null; then
+              ready=true
+              break
+            fi
+
+            sleep 1
+          done
+
+          if [ "$ready" != true ]; then
+            echo "Server did not become ready."
+            exit 1
+          fi
+
+          npm run test:http

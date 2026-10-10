@@ -21,11 +21,12 @@ async function checkIngestion() {
     let bridgeApiKey = "";
 
     if (useHttp) {
+        const credentialFile =
+            process.env.TEST_BRIDGE_CREDENTIAL_FILE ??
+            ".keys/bridge-1a83556f-c931-4d72-96ca-1217577fbbf5.json";
+
         const credentials = JSON.parse(
-            await readFile(
-                ".keys/bridge-1a83556f-c931-4d72-96ca-1217577fbbf5.json",
-                "utf8",
-            ),
+            await readFile(credentialFile, "utf8"),
         );
 
         assert.equal(typeof credentials.apiKey, "string");

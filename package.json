@@ -36,7 +36,8 @@
     "test:db": "npm run check:devices && npm run check:packet-store && npm run check:concurrency && npm run check:ingestion && npm run check:db-timeouts",
     "test:http": "npm run check:bridge-auth && npm run check:ingestion-http && npm run check:bridge-lifecycle",
     "check:bridge-lifecycle": "tsx src/scripts/check-bridge-lifecycle.ts",
-    "check:http-timeouts": "tsx src/scripts/check-http-timeouts.ts"
+    "check:http-timeouts": "tsx src/scripts/check-http-timeouts.ts",
+    "ci:setup-http": "tsx src/scripts/setup-ci-http.ts"
   },
   "keywords": [],
   "author": "",
