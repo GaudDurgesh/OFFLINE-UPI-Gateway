@@ -21,6 +21,15 @@ export type DeliveryPause = {
     httpStatus: number;
 };
 
+export const MAX_STORED_PACKETS = 10_000;
+
+export class OutboxCapacityError extends Error {
+    constructor() {
+        super("Outbox storage capacity reached.");
+        this.name = "OutboxCapacityError";
+    }
+}
+
 export class BridgeOutbox {
     private readonly database: DatabaseSync;
 
@@ -82,24 +91,67 @@ export class BridgeOutbox {
             throw new Error("Cannot queue an invalid packet.");
         }
 
-        const result = this.database.prepare(`
-      INSERT INTO outbox (
-        packet_hash,
-        packet_json,
-        queued_at
-      )
-      VALUES (?, ?, ?)
-      ON CONFLICT (packet_hash) DO NOTHING
-    `).run(
-            validated.packetHash,
-            JSON.stringify(validated.packet),
-            Date.now(),
-        );
+        // Keep duplicate lookup, capacity check, and insertion together.
+        // Concurrent enqueue processes must not claim the same free slot.
+        this.database.exec("BEGIN IMMEDIATE");
 
-        return {
-            packetHash: validated.packetHash,
-            inserted: Number(result.changes) === 1,
-        };
+        try {
+            const existing = this.database.prepare(`
+                SELECT packet_hash
+                FROM outbox
+                WHERE packet_hash = ?
+            `).get(validated.packetHash);
+
+            if (existing) {
+                this.database.exec("COMMIT");
+
+                return {
+                    packetHash: validated.packetHash,
+                    inserted: false,
+                };
+            }
+
+            const row = this.database.prepare(`
+                SELECT COUNT(*) AS total
+                FROM outbox
+            `).get();
+
+            if (
+                !row ||
+                typeof row.total !== "number" ||
+                !Number.isSafeInteger(row.total) ||
+                row.total < 0
+            ) {
+                throw new Error("Invalid outbox packet count.");
+            }
+
+            if (row.total >= MAX_STORED_PACKETS) {
+                throw new OutboxCapacityError();
+            }
+
+            this.database.prepare(`
+                INSERT INTO outbox (
+                    packet_hash,
+                    packet_json,
+                    queued_at
+                )
+                VALUES (?, ?, ?)
+            `).run(
+                validated.packetHash,
+                JSON.stringify(validated.packet),
+                Date.now(),
+            );
+
+            this.database.exec("COMMIT");
+
+            return {
+                packetHash: validated.packetHash,
+                inserted: true,
+            };
+        } catch (error) {
+            this.database.exec("ROLLBACK");
+            throw error;
+        }
     }
 
     listPending(limit = 100, nowMs = Date.now()): PendingPacket[] {

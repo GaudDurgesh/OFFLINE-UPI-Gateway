@@ -1,5 +1,8 @@
 import { open } from "node:fs/promises";
-import { BridgeOutbox } from "../bridge/outbox.js";
+import {
+  BridgeOutbox,
+  OutboxCapacityError,
+} from "../bridge/outbox.js";
 import { validatePacket } from "../domain/packet.js";
 
 const MAX_FILE_BYTES = 16 * 1024;
@@ -88,12 +91,22 @@ async function enqueuePacket() {
 
 try {
   await enqueuePacket();
-} catch {
-  // Avoid printing packet contents or filesystem error details.
-  console.error(
-    "Enqueue failed. Usage: npm run bridge:enqueue -- <packet.json>. " +
-    "The file must contain a valid packet and be at most 16 KiB; " +
-    "the queue directory must be writable.",
-  );
-  process.exitCode = 1;
+} catch (error) {
+  if (error instanceof OutboxCapacityError) {
+    console.error(JSON.stringify({
+      event: "outbox_capacity_reached",
+      error: "OUTBOX_FULL",
+    }));
+
+    process.exitCode = 4;
+  } else {
+    // Avoid printing packet contents or filesystem error details.
+    console.error(
+      "Enqueue failed. Usage: npm run bridge:enqueue -- <packet.json>. " +
+      "The file must contain a valid packet and be at most 16 KiB; " +
+      "the queue directory must be writable.",
+    );
+
+    process.exitCode = 1;
+  }
 }
