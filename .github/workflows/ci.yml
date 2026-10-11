@@ -153,3 +153,4 @@ jobs:
           fi
 
           npm run test:http
+          npm run check:bridge-gateway

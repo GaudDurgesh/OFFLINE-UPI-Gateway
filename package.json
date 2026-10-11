@@ -53,7 +53,8 @@
     "bridge:resume": "tsx src/scripts/bridge-resume.ts",
     "check:delivery-lock": "tsx src/scripts/check-delivery-lock.ts",
     "check:bridge-runner": "tsx src/scripts/check-bridge-runner.ts",
-    "bridge:run": "tsx src/scripts/bridge-run.ts"
+    "bridge:run": "tsx src/scripts/bridge-run.ts",
+    "check:bridge-gateway": "tsx src/scripts/check-bridge-gateway.ts"
   },
   "keywords": [],
   "author": "",
