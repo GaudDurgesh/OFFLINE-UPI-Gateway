@@ -1,62 +1,8 @@
-import { open } from "node:fs/promises";
-import { isBridgeKey } from "../crypto/bridge-keys.js";
+import {readApiKey} from "../bridge/credentials.js"
 import { BridgeOutbox } from "../bridge/outbox.js";
 import { createGatewayClient } from "../bridge/gateway-client.js";
 import { createDeliveryWorker } from "../bridge/delivery-worker.js";
-
-async function readApiKey(filename: string): Promise<string> {
-  const file = await open(filename, "r");
-
-  try {
-    const info = await file.stat();
-    const limit = 4 * 1024;
-
-    if (!info.isFile() || info.size === 0 || info.size > limit) {
-      throw new Error("Invalid credential file.");
-    }
-
-    const buffer = Buffer.alloc(limit + 1);
-    let total = 0;
-
-    while (total < buffer.length) {
-      const { bytesRead } = await file.read(
-        buffer,
-        total,
-        buffer.length - total,
-        null,
-      );
-
-      if (bytesRead === 0) {
-        break;
-      }
-
-      total += bytesRead;
-    }
-
-    if (total === 0 || total > limit) {
-      throw new Error("Invalid credential file size.");
-    }
-
-    const text = new TextDecoder("utf-8", {
-      fatal: true,
-    }).decode(buffer.subarray(0, total));
-
-    const credentials: unknown = JSON.parse(text);
-
-    if (
-      typeof credentials !== "object" ||
-      credentials === null ||
-      !("apiKey" in credentials) ||
-      !isBridgeKey(credentials.apiKey)
-    ) {
-      throw new Error("Invalid bridge credential.");
-    }
-
-    return credentials.apiKey;
-  } finally {
-    await file.close();
-  }
-}
+import { acquireDeliveryLock } from "../bridge/delivery-lock.js";
 
 async function deliverOnce() {
   const args = process.argv.slice(2);
@@ -82,22 +28,27 @@ async function deliverOnce() {
     apiKey,
   });
 
-  const outbox = new BridgeOutbox(directory);
+  const releaseLock = acquireDeliveryLock(directory);
 
   try {
-    const worker = createDeliveryWorker(outbox, deliver);
-    const result = await worker.runOnce();
+    const outbox = new BridgeOutbox(directory);
 
-    console.log(JSON.stringify(result, null, 2));
+    try {
+      const worker = createDeliveryWorker(outbox, deliver);
+      const result = await worker.runOnce();
 
-    // Distinguish pending retries and pauses for command-line callers.
-    if (result.status === "RETRY") {
-      process.exitCode = 2;
-    } else if (result.status === "PAUSED") {
-      process.exitCode = 3;
+      console.log(JSON.stringify(result, null, 2));
+
+      if (result.status === "RETRY") {
+        process.exitCode = 2;
+      } else if (result.status === "PAUSED") {
+        process.exitCode = 3;
+      }
+    } finally {
+      outbox.close();
     }
   } finally {
-    outbox.close();
+    releaseLock();
   }
 }
 

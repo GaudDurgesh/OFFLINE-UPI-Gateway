@@ -45,12 +45,15 @@
     "check:outbox-retries": "tsx src/scripts/check-outbox-retries.ts",
     "check:delivery-worker": "tsx src/scripts/check-delivery-worker.ts",
     "check:bridge-delivery": "tsx src/scripts/check-bridge-delivery.ts",
-    "test:bridge": "npm run check:outbox && npm run check:gateway-response && npm run check:gateway-client && npm run check:retry-policy && npm run check:outbox-retries && npm run check:delivery-worker && npm run check:bridge-delivery && npm run check:bridge-cli",
+    "test:bridge": "npm run check:outbox && npm run check:gateway-response && npm run check:gateway-client && npm run check:retry-policy && npm run check:outbox-retries && npm run check:delivery-worker && npm run check:bridge-delivery && npm run check:bridge-cli && npm run check:delivery-lock && npm run check:bridge-runner",
     "bridge:enqueue": "tsx src/scripts/bridge-enqueue.ts",
     "bridge:status": "tsx src/scripts/bridge-status.ts",
     "bridge:deliver-once": "tsx src/scripts/bridge-deliver-once.ts",
     "check:bridge-cli": "tsx src/scripts/check-bridge-cli.ts",
-    "bridge:resume": "tsx src/scripts/bridge-resume.ts"
+    "bridge:resume": "tsx src/scripts/bridge-resume.ts",
+    "check:delivery-lock": "tsx src/scripts/check-delivery-lock.ts",
+    "check:bridge-runner": "tsx src/scripts/check-bridge-runner.ts",
+    "bridge:run": "tsx src/scripts/bridge-run.ts"
   },
   "keywords": [],
   "author": "",

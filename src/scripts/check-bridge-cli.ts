@@ -8,6 +8,7 @@ import { join, resolve } from "node:path";
 import { generateBridgeKey } from "../crypto/bridge-keys.js";
 import { validatePacket } from "../domain/packet.js";
 import { BridgeOutbox } from "../bridge/outbox.js";
+import { acquireDeliveryLock } from "../bridge/delivery-lock.js";
 
 type CommandResult = {
     code: number;
@@ -166,6 +167,22 @@ async function checkBridgeCli() {
         });
 
         console.log("PASS: enqueue, duplicate detection, and status commands work.");
+
+        const releaseLock = acquireDeliveryLock(mainQueue);
+        const requestsBeforeLockCheck = requests;
+
+        try {
+            const blocked = await command(
+                "bridge-deliver-once.ts", deliveryArgs, mainQueue,
+            );
+
+            assert.equal(blocked.code, 1);
+            assert.equal(requests, requestsBeforeLockCheck);
+        } finally {
+            releaseLock();
+        }
+
+        console.log("PASS: held delivery lock blocks the command before sending.");
 
         const delivered = await command(
             "bridge-deliver-once.ts", deliveryArgs, mainQueue,
