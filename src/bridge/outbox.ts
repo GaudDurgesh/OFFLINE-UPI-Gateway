@@ -377,6 +377,66 @@ export class BridgeOutbox {
     `).run();
     }
 
+    getSummary(nowMs = Date.now()) {
+        if (!Number.isSafeInteger(nowMs) || nowMs < 0) {
+            throw new Error("Invalid queue clock.");
+        }
+
+        const row = this.database.prepare(`
+      SELECT
+        COUNT(*) AS total,
+        COUNT(result.packet_hash) AS completed,
+        COALESCE(SUM(
+          CASE
+            WHEN result.packet_hash IS NULL
+              AND (
+                retry.next_attempt_at IS NULL
+                OR retry.next_attempt_at <= ?
+              )
+            THEN 1
+            ELSE 0
+          END
+        ), 0) AS due
+      FROM outbox AS packet
+      LEFT JOIN outbox_results AS result
+        ON result.packet_hash = packet.packet_hash
+      LEFT JOIN outbox_retries AS retry
+        ON retry.packet_hash = packet.packet_hash
+    `).get(nowMs);
+
+        if (
+            !row ||
+            typeof row.total !== "number" ||
+            typeof row.completed !== "number" ||
+            typeof row.due !== "number" ||
+            !Number.isSafeInteger(row.total) ||
+            !Number.isSafeInteger(row.completed) ||
+            !Number.isSafeInteger(row.due)
+        ) {
+            throw new Error("Invalid queue summary.");
+        }
+
+        const pending = row.total - row.completed;
+
+        if (
+            row.completed < 0 ||
+            pending < 0 ||
+            row.due < 0 ||
+            row.due > pending
+        ) {
+            throw new Error("Inconsistent queue summary.");
+        }
+
+        return {
+            total: row.total,
+            completed: row.completed,
+            pending,
+            due: row.due,
+            scheduled: pending - row.due,
+            pause: this.getDeliveryPause(),
+        };
+    }
+
     close(): void {
         this.database.close();
     }
