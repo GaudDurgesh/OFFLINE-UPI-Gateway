@@ -18,6 +18,10 @@ import { buildPacket } from "../services/build-packet.js";
 import { BridgeOutbox } from "../bridge/outbox.js";
 import type { MeshPacket } from "../domain/packet.js";
 import { createServer, request } from "node:http";
+import {
+    validateGatewayResponse,
+    type GatewayResponse,
+} from "../bridge/gateway-response.js";
 
 async function checkBridgeGateway() {
     assert.equal(
@@ -58,6 +62,12 @@ async function checkBridgeGateway() {
     const forwardedAt: number[] = [];
     let proxyOrigin = "";
 
+    let expectedPacketHash = "";
+    let droppedResponse: GatewayResponse | undefined;
+    let proxyFailure: string | null = null;
+
+    const forwardedBodies: string[] = [];
+
     const proxy = createServer((req, res) => {
         if (
             req.method !== "POST" ||
@@ -87,6 +97,18 @@ async function checkBridgeGateway() {
 
         forwardedAt.push(Date.now());
 
+        const requestChunks: Buffer[] = [];
+
+        req.on("data", (chunk: Buffer) => {
+            requestChunks.push(chunk);
+        });
+
+        req.on("end", () => {
+            forwardedBodies.push(
+                Buffer.concat(requestChunks).toString("utf8"),
+            );
+        });
+
         const upstream = request(
             new URL("/api/bridge/ingest", origin),
             {
@@ -98,6 +120,62 @@ async function checkBridgeGateway() {
                 },
             },
             (response) => {
+
+                if (!droppedResponse && response.statusCode === 200) {
+                    const chunks: Buffer[] = [];
+                    let size = 0;
+
+                    response.on("data", (chunk: Buffer) => {
+                        size += chunk.length;
+
+                        if (size > 16 * 1024) {
+                            proxyFailure = "Gateway response exceeded test limit.";
+                            response.destroy();
+                            res.destroy();
+                            return;
+                        }
+
+                        chunks.push(chunk);
+                    });
+
+                    response.on("error", () => {
+                        proxyFailure = "Could not read the settlement response.";
+                        res.destroy();
+                    });
+
+                    response.on("end", () => {
+                        try {
+                            const input: unknown = JSON.parse(
+                                Buffer.concat(chunks).toString("utf8"),
+                            );
+
+                            const checked = validateGatewayResponse(
+                                input,
+                                expectedPacketHash,
+                            );
+
+                            if (
+                                !checked.ok ||
+                                checked.response.repeated ||
+                                checked.response.outcome.status !== "SETTLED"
+                            ) {
+                                throw new Error("Expected the first settlement.");
+                            }
+
+                            droppedResponse = checked.response;
+                        } catch {
+                            proxyFailure =
+                                "The response selected for dropping was not a valid first settlement.";
+                        } finally {
+                            // The gateway has responded, but the bridge receives
+                            // neither the response headers nor the response body.
+                            res.destroy();
+                        }
+                    });
+
+                    return;
+                }
+
                 res.writeHead(response.statusCode ?? 502, {
                     "Content-Type":
                         response.headers["content-type"] ?? "application/json",
@@ -114,6 +192,11 @@ async function checkBridgeGateway() {
         upstream.setTimeout(20_000, () => upstream.destroy());
 
         upstream.on("error", () => {
+
+            if (res.destroyed) {
+                return;
+            }
+
             if (!res.headersSent) {
                 res.writeHead(502);
             }
@@ -135,6 +218,9 @@ async function checkBridgeGateway() {
         try {
             const queued = outbox.enqueue(packet);
             hashes.add(queued.packetHash);
+            if (simulateOutage) {
+                expectedPacketHash = queued.packetHash;
+            }
             assert.equal(outbox.getSummary().pending, 1);
 
             const child = spawn(
@@ -180,6 +266,8 @@ async function checkBridgeGateway() {
                 const deadline = Date.now() + 60_000;
 
                 while (true) {
+
+                    assert.equal(proxyFailure, null);
 
                     if (simulateOutage && !retryObserved) {
                         const retry = outbox.getRetryState(queued.packetHash);
@@ -234,6 +322,21 @@ async function checkBridgeGateway() {
 
                     if (completed) {
                         assert.equal(outbox.getSummary().pending, 0);
+
+                        if (simulateOutage) {
+                            assert.ok(droppedResponse);
+
+                            // One retry for the initial 503, then another
+                            // for the lost settlement response.
+                            const retry = outbox.getRetryState(queued.packetHash);
+                            assert.ok(retry);
+                            assert.equal(retry.attempts, 2);
+
+                            console.log(
+                                "PASS: the lost settlement response creates another saved retry.",
+                            );
+                        }
+
                         return completed;
                     }
 
@@ -359,9 +462,27 @@ async function checkBridgeGateway() {
         console.log(
             "PASS: the same runner resumes automatically after gateway access returns.",
         );
+        assert.equal(proxyFailure, null);
+        assert.ok(droppedResponse);
+        assert.equal(droppedResponse.repeated, false);
+        assert.equal(droppedResponse.outcome.status, "SETTLED");
 
-        assert.equal(first.repeated, false);
+        console.log(
+            "PASS: the proxy drops a successful settlement response before the bridge receives it.",
+        );
+
+        assert.equal(first.repeated, true);
         assert.ok(first.outcome.status === "SETTLED");
+        assert.equal(first.packetHash, droppedResponse.packetHash);
+        assert.deepEqual(first.outcome, droppedResponse.outcome);
+
+        assert.equal(forwardedBodies.length, 2);
+        assert.equal(forwardedBodies[1], forwardedBodies[0]);
+        assert.deepEqual(JSON.parse(forwardedBodies[0]!), packet);
+
+        console.log(
+            "PASS: retry sends the identical packet and recovers the original settlement.",
+        );
 
         console.log(
             "PASS: runner delivers a signed, encrypted payment to the real gateway.",
