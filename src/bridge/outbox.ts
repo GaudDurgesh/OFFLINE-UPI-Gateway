@@ -22,6 +22,7 @@ export type DeliveryPause = {
 };
 
 export const MAX_STORED_PACKETS = 10_000;
+export const COMPLETED_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 export class OutboxCapacityError extends Error {
     constructor() {
@@ -487,6 +488,76 @@ export class BridgeOutbox {
             scheduled: pending - row.due,
             pause: this.getDeliveryPause(),
         };
+    }
+
+    pruneCompleted(limit = 100, nowMs = Date.now()): number {
+        if (
+            !Number.isSafeInteger(limit) ||
+            limit < 1 ||
+            limit > 1000
+        ) {
+            throw new Error("Cleanup batch size must be between 1 and 1000.");
+        }
+
+        if (!Number.isSafeInteger(nowMs) || nowMs < 0) {
+            throw new Error("Invalid cleanup clock.");
+        }
+
+        const cutoff = nowMs - COMPLETED_RETENTION_MS;
+
+        if (cutoff < 0) {
+            return 0;
+        }
+
+        this.database.exec("BEGIN IMMEDIATE");
+
+        try {
+            const rows = this.database.prepare(`
+                SELECT packet.packet_hash
+                FROM outbox AS packet
+                INNER JOIN outbox_results AS result
+                    ON result.packet_hash = packet.packet_hash
+                WHERE result.completed_at <= ?
+                ORDER BY result.completed_at, packet.packet_hash
+                LIMIT ?
+            `).all(cutoff, limit);
+
+            const deleteRetry = this.database.prepare(`
+                DELETE FROM outbox_retries WHERE packet_hash = ?
+            `);
+
+            const deleteResult = this.database.prepare(`
+                DELETE FROM outbox_results WHERE packet_hash = ?
+            `);
+
+            const deletePacket = this.database.prepare(`
+                DELETE FROM outbox WHERE packet_hash = ?
+            `);
+
+            for (const row of rows) {
+                if (typeof row.packet_hash !== "string") {
+                    throw new Error("Invalid cleanup record.");
+                }
+
+                deleteRetry.run(row.packet_hash);
+
+                const result = deleteResult.run(row.packet_hash);
+                const packet = deletePacket.run(row.packet_hash);
+
+                if (
+                    Number(result.changes) !== 1 ||
+                    Number(packet.changes) !== 1
+                ) {
+                    throw new Error("Cleanup did not remove the expected records.");
+                }
+            }
+
+            this.database.exec("COMMIT");
+            return rows.length;
+        } catch (error) {
+            this.database.exec("ROLLBACK");
+            throw error;
+        }
     }
 
     close(): void {

@@ -9,6 +9,7 @@ import {
   BridgeOutbox,
   MAX_STORED_PACKETS,
   OutboxCapacityError,
+  COMPLETED_RETENTION_MS,
 } from "../bridge/outbox.js";
 import {
   validatePacket,
@@ -273,6 +274,24 @@ async function checkCapacity() {
       console.log(
         "PASS: capacity enforcement and duplicate detection survive reopening.",
       );
+
+      const future = Date.now() + COMPLETED_RETENTION_MS + 1_000;
+
+      assert.equal(reopened.pruneCompleted(100, future), 1);
+      assert.equal(reopened.getSummary().total, MAX_STORED_PACKETS - 1);
+      assert.equal(reopened.getSummary().completed, 0);
+
+      assert.equal(
+        reopened.enqueue(makePacket(MAX_STORED_PACKETS + 3)).inserted,
+        true,
+      );
+
+      assert.equal(reopened.getSummary().total, MAX_STORED_PACKETS);
+
+      console.log(
+        "PASS: removing an expired completed record restores one admission slot.",
+      );
+
     } finally {
       reopened.close();
     }
