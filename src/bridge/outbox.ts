@@ -31,6 +31,22 @@ export class OutboxCapacityError extends Error {
     }
 }
 
+export type PacketDeliveryStatus = {
+    packetHash: string;
+    deliveryStatus:
+    | "NOT_FOUND"
+    | "PENDING"
+    | "RETRY_SCHEDULED"
+    | "PAUSED"
+    | "COMPLETED";
+    response: GatewayResponse | null;
+    retry: {
+        attempts: number;
+        nextAttemptAt: number;
+    } | null;
+    pause: DeliveryPause | null;
+};
+
 export class BridgeOutbox {
     private readonly database: DatabaseSync;
 
@@ -428,6 +444,67 @@ export class BridgeOutbox {
         this.database.prepare(`
       DELETE FROM outbox_pause WHERE id = 1
     `).run();
+    }
+
+    getPacketStatus(
+        packetHash: string,
+        nowMs = Date.now(),
+    ): PacketDeliveryStatus {
+        if (!/^[0-9a-f]{64}$/.test(packetHash)) {
+            throw new Error("Invalid packet hash.");
+        }
+
+        if (!Number.isSafeInteger(nowMs) || nowMs < 0) {
+            throw new Error("Invalid lookup clock.");
+        }
+
+        // Read packet, outcome, retry, and pause from one snapshot.
+        this.database.exec("BEGIN");
+
+        try {
+            const status: PacketDeliveryStatus = {
+                packetHash,
+                deliveryStatus: "NOT_FOUND",
+                response: null,
+                retry: null,
+                pause: null,
+            };
+
+            const existing = this.database.prepare(`
+                SELECT packet_hash
+                FROM outbox
+                WHERE packet_hash = ?
+            `).get(packetHash);
+
+            if (existing) {
+                const response = this.getCompleted(packetHash);
+
+                if (response) {
+                    status.deliveryStatus = "COMPLETED";
+                    status.response = response;
+                } else {
+                    status.retry = this.getRetryState(packetHash);
+                    status.pause = this.getDeliveryPause();
+
+                    if (status.pause) {
+                        status.deliveryStatus = "PAUSED";
+                    } else if (
+                        status.retry &&
+                        status.retry.nextAttemptAt > nowMs
+                    ) {
+                        status.deliveryStatus = "RETRY_SCHEDULED";
+                    } else {
+                        status.deliveryStatus = "PENDING";
+                    }
+                }
+            }
+
+            this.database.exec("COMMIT");
+            return status;
+        } catch (error) {
+            this.database.exec("ROLLBACK");
+            throw error;
+        }
     }
 
     getSummary(nowMs = Date.now()) {
