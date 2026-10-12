@@ -1,4 +1,7 @@
-import { BridgeOutbox } from "../bridge/outbox.js";
+import {
+  BridgeOutbox,
+  MAX_STORED_PACKETS,
+} from "../bridge/outbox.js";
 
 function showStatus() {
   if (process.argv.slice(2).length !== 0) {
@@ -14,7 +17,14 @@ function showStatus() {
   const outbox = new BridgeOutbox(directory);
 
   try {
-    console.log(JSON.stringify(outbox.getSummary(), null, 2));
+    const summary = outbox.getSummary();
+
+    console.log(JSON.stringify({
+      ...summary,
+      capacity: MAX_STORED_PACKETS,
+      remainingSlots: Math.max(0, MAX_STORED_PACKETS - summary.total),
+      full: summary.total >= MAX_STORED_PACKETS,
+    }, null, 2));
   } finally {
     outbox.close();
   }

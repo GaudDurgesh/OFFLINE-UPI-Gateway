@@ -164,6 +164,9 @@ async function checkBridgeCli() {
             due: 1,
             scheduled: 0,
             pause: null,
+            capacity: 10_000,
+            remainingSlots: 9_999,
+            full: false,
         });
 
         console.log("PASS: enqueue, duplicate detection, and status commands work.");
@@ -206,6 +209,9 @@ async function checkBridgeCli() {
         assert.equal(finalStatus.code, 0);
         assert.equal(JSON.parse(finalStatus.stdout).completed, 1);
         assert.equal(JSON.parse(finalStatus.stdout).pending, 0);
+        assert.equal(JSON.parse(finalStatus.stdout).capacity, 10_000);
+        assert.equal(JSON.parse(finalStatus.stdout).remainingSlots, 9_999);
+        assert.equal(JSON.parse(finalStatus.stdout).full, false);
 
         console.log("PASS: completed delivery returns zero and is not resent.");
 
