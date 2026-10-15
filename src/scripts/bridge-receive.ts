@@ -1,4 +1,5 @@
-import { createServer } from "node:http";
+import { createServer } from "node:https";
+import { readFile } from "node:fs/promises";
 import { isIPv4 } from "node:net";
 
 const host = process.env.BRIDGE_LISTEN_HOST;
@@ -10,6 +11,9 @@ if (!host || !isIPv4(host)) {
 
 const server = createServer(
   {
+    key: await readFile(".keys/receiver-key.pem"),
+    cert: await readFile(".keys/receiver-cert.pem"),
+    minVersion: "TLSv1.2",
     headersTimeout: 10_000,
     requestTimeout: 15_000,
     keepAliveTimeout: 5_000,
@@ -42,7 +46,7 @@ server.on("error", (error: NodeJS.ErrnoException) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`Local receiver: http://${host}:${port}/health`);
+  console.log(`Local receiver: https://${host}:${port}/health`);
 });
 
 let stopping = false;
