@@ -63,7 +63,8 @@
     "demo:create": "tsx src/scripts/create-demo.ts",
     "bridge:receive": "tsx src/scripts/bridge-receive.ts",
     "receiver:setup": "tsx src/scripts/create-receiver-token.ts",
-    "check:receiver-auth": "tsx src/scripts/check-receiver-auth.ts"
+    "check:receiver-auth": "tsx src/scripts/check-receiver-auth.ts",
+    "check:receiver-http": "tsx src/scripts/check-receiver-http.ts"
   },
   "keywords": [],
   "author": "",

@@ -5,7 +5,7 @@ const TOKEN_PATTERN = /^mesh_receiver_[0-9a-f]{64}$/;
 export function createReceiverAuthenticator(
     expectedToken: string,
 ): (authorization: unknown) => boolean {
-    if (!TOKEN_PATTERN.test(expectedToken)) {
+    if (expectedToken.length !== 78 || !TOKEN_PATTERN.test(expectedToken)) {
         throw new Error("Invalid receiver token configuration.");
     }
 
