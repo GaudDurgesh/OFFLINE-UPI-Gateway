@@ -3,6 +3,8 @@ import { open, readFile } from "node:fs/promises";
 import { isIPv4 } from "node:net";
 import { BridgeOutbox } from "../bridge/outbox.js";
 import { createReceiverApp } from "../bridge/receiver-app.js";
+import express from "express";
+import { createReceiverBoundary } from "../bridge/receiver-boundary.js";
 
 async function readReceiverToken(): Promise<string> {
   const file = await open(".keys/receiver.json", "r");
@@ -61,7 +63,12 @@ async function main(): Promise<void> {
   const directory = process.env.BRIDGE_DATA_DIR ?? ".bridge-data";
   const port = 8787;
 
-  if (!host || !isIPv4(host) || !directory.trim()) {
+  if (
+    !host ||
+    !isIPv4(host) ||
+    host === "0.0.0.0" ||
+    !directory.trim()
+  ) {
     throw new Error("Invalid receiver configuration.");
   }
 
@@ -73,7 +80,16 @@ async function main(): Promise<void> {
   const outbox = new BridgeOutbox(directory);
 
   try {
-    const app = createReceiverApp(outbox, token);
+    const app = express();
+
+    app.disable("x-powered-by");
+    app.set("trust proxy", false);
+
+    app.use(
+      createReceiverBoundary(`https://${host}:${port}`),
+    );
+
+    app.use(createReceiverApp(outbox, token));
 
     const server = createServer(
       {
