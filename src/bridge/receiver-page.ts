@@ -65,6 +65,31 @@ export const receiverPage = `<!doctype html>
     <p id="result" role="status" aria-live="polite"></p>
     <p class="note">Maximum file size: 16 KiB.
       Use the receiver token, not the gateway API key.</p>
+      <hr>
+
+<h2>Check payment status</h2>
+<p>Enter the receiver token above and the packet hash below.</p>
+
+<form id="status-form">
+  <label for="status-hash">Packet hash</label>
+  <input
+    id="status-hash"
+    type="text"
+    required
+    minlength="64"
+    maxlength="64"
+    pattern="[0-9a-f]{64}"
+    autocomplete="off"
+    autocapitalize="none"
+    spellcheck="false"
+  >
+
+  <button id="check-status" type="submit">
+    Check payment status
+  </button>
+</form>
+
+<p id="status-result" role="status" aria-live="polite"></p>
   </main>
 </body>
 </html>`;
@@ -190,6 +215,154 @@ form.addEventListener("submit", async (event) => {
     clearTimeout(timer);
     sending = false;
     button.disabled = false;
+  }
+});
+const statusForm = document.getElementById("status-form");
+const statusHashInput = document.getElementById("status-hash");
+const statusButton = document.getElementById("check-status");
+const statusResult = document.getElementById("status-result");
+
+let checkingStatus = false;
+
+statusForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  if (checkingStatus) return;
+
+  if (location.protocol !== "https:") {
+    statusResult.textContent = "Open this page using HTTPS.";
+    return;
+  }
+
+  const receiverToken = tokenInput.value.trim();
+  const hash = statusHashInput.value.trim();
+
+  if (
+    receiverToken.length !== 78 ||
+    !/^mesh_receiver_[0-9a-f]{64}$/.test(receiverToken)
+  ) {
+    statusResult.textContent = "Enter a valid receiver token above.";
+    return;
+  }
+
+  if (hash.length !== 64 || !/^[0-9a-f]{64}$/.test(hash)) {
+    statusResult.textContent = "Enter a valid 64-character packet hash.";
+    return;
+  }
+
+  checkingStatus = true;
+  statusButton.disabled = true;
+  tokenInput.value = "";
+  statusResult.textContent = "Checking payment status...";
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+
+  try {
+    const response = await fetch("/packets/" + hash, {
+      headers: {
+        Authorization: "Bearer " + receiverToken,
+      },
+      signal: controller.signal,
+      redirect: "error",
+      credentials: "omit",
+      cache: "no-store",
+    });
+
+    if (response.status === 401) {
+      statusResult.textContent = "Receiver token rejected. Enter it again.";
+      return;
+    }
+
+    if (response.status === 429) {
+      statusResult.textContent = "Too many checks. Wait a minute and retry.";
+      return;
+    }
+
+    if (response.status !== 200 && response.status !== 404) {
+      throw new Error("Result unavailable.");
+    }
+
+    const data = await response.json();
+
+    if (!data || data.packetHash !== hash) {
+      throw new Error("Unexpected packet result.");
+    }
+
+    if (
+      response.status === 404 &&
+      data.deliveryStatus === "NOT_FOUND"
+    ) {
+      statusResult.textContent =
+        "This bridge has no stored record for this packet. " +
+        "This does not prove that the payment failed.";
+      return;
+    }
+
+    if (response.status !== 200) {
+      throw new Error("Unexpected response.");
+    }
+
+    switch (data.deliveryStatus) {
+      case "PENDING":
+        statusResult.textContent =
+          "Pending delivery or awaiting confirmation. Payment is not yet confirmed.";
+        break;
+
+      case "RETRY_SCHEDULED":
+        statusResult.textContent =
+          "Waiting for a delivery retry. Payment is not yet confirmed.";
+        break;
+
+      case "PAUSED":
+        statusResult.textContent =
+          "Bridge delivery is paused. The bridge operator must resolve it.";
+        break;
+
+      case "COMPLETED": {
+        const saved = data.response;
+
+        if (!saved || saved.packetHash !== hash || !saved.outcome) {
+          throw new Error("Missing stored outcome.");
+        }
+
+        const outcome = saved.outcome;
+
+        if (
+          (outcome.status === "SETTLED" ||
+            outcome.status === "DUPLICATE") &&
+          typeof outcome.transactionId === "string" &&
+          /^[1-9][0-9]*$/.test(outcome.transactionId)
+        ) {
+          statusResult.textContent =
+            "Demo payment settled. Transaction ID: " +
+            outcome.transactionId +
+            ". This is the gateway result stored by this bridge.";
+        } else if (
+          (outcome.status === "INVALID" ||
+            outcome.status === "REJECTED") &&
+          typeof outcome.reason === "string"
+        ) {
+          statusResult.textContent =
+            "Payment was not settled. Reason: " + outcome.reason;
+        } else {
+          throw new Error("Unexpected outcome.");
+        }
+
+        break;
+      }
+
+      default:
+        throw new Error("Unknown delivery status.");
+    }
+  } catch {
+    statusResult.textContent =
+      "Could not confirm the stored result. Retry this status check; " +
+      "do not create another payment.";
+  } finally {
+    clearTimeout(timeout);
+    checkingStatus = false;
+    statusButton.disabled = false;
   }
 });
 `;

@@ -7,7 +7,7 @@ import { OutboxCapacityError, type BridgeOutbox } from "./outbox.js";
 import { receiverPage, receiverScript } from "./receiver-page.js";
 
 export function createReceiverApp(
-    outbox: Pick<BridgeOutbox, "enqueue">,
+    outbox: Pick<BridgeOutbox, "enqueue" | "getPacketStatus">,
     token: string,
 ) {
     const authenticate = createReceiverAuthenticator(token);
@@ -96,6 +96,48 @@ export function createReceiverApp(
                     return;
                 }
 
+                next(error);
+            }
+        },
+    );
+
+    app.get(
+        "/packets/:packetHash",
+        rateLimit({
+            windowMs: 60_000,
+            limit: 60,
+            standardHeaders: "draft-8",
+            legacyHeaders: false,
+            message: { error: "RATE_LIMITED" },
+        }),
+        (req, res, next) => {
+            if (!authenticate(req.get("authorization"))) {
+                res.setHeader("WWW-Authenticate", "Bearer");
+                res.status(401).json({ error: "UNAUTHORIZED" });
+                return;
+            }
+
+            next();
+        },
+        (req, res, next) => {
+            const packetHash = req.params.packetHash;
+
+            if (
+                typeof packetHash !== "string" ||
+                packetHash.length !== 64 ||
+                !/^[0-9a-f]{64}$/.test(packetHash)
+            ) {
+                res.status(400).json({ error: "INVALID_PACKET_HASH" });
+                return;
+            }
+
+            try {
+                const result = outbox.getPacketStatus(packetHash);
+
+                res
+                    .status(result.deliveryStatus === "NOT_FOUND" ? 404 : 200)
+                    .json(result);
+            } catch (error) {
                 next(error);
             }
         },

@@ -17,6 +17,9 @@ async function main(): Promise<void> {
   let forceFailure = false;
 
   const app = createReceiverApp({
+    getPacketStatus(packetHash, nowMs) {
+      return outbox.getPacketStatus(packetHash, nowMs);
+    },
     enqueue(input) {
       if (forceFull) throw new OutboxCapacityError();
       if (forceFailure) throw new Error("PRIVATE_DATABASE_DETAIL");
