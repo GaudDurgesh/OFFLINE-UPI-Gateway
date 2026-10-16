@@ -16,9 +16,12 @@ concurrency:
 
 jobs:
   baseline:
+
     name: Baseline tests and build
     runs-on: ubuntu-latest
     timeout-minutes: 10
+
+
 
     steps:
       - name: Check out repository
@@ -40,6 +43,9 @@ jobs:
 
       - name: Run bridge queue and delivery tests
         run: npm run test:bridge
+
+      - name: Run local receiver tests
+        run: npm run test:receiver
 
       - name: Build TypeScript
         run: npm run build
