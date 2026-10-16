@@ -450,7 +450,11 @@ export class BridgeOutbox {
         packetHash: string,
         nowMs = Date.now(),
     ): PacketDeliveryStatus {
-        if (!/^[0-9a-f]{64}$/.test(packetHash)) {
+        if (
+            typeof packetHash !== "string" ||
+            packetHash.length !== 64 ||
+            !/^[0-9a-f]{64}$/.test(packetHash)
+        ) {
             throw new Error("Invalid packet hash.");
         }
 

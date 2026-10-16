@@ -274,6 +274,12 @@ statusForm.addEventListener("submit", async (event) => {
       return;
     }
 
+    if (response.status === 403) {
+  statusResult.textContent =
+    "Request blocked. Open the receiver page directly and retry.";
+  return;
+}
+
     if (response.status === 429) {
       statusResult.textContent = "Too many checks. Wait a minute and retry.";
       return;

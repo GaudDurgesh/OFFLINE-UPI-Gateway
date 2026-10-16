@@ -66,7 +66,9 @@
     "check:receiver-auth": "tsx src/scripts/check-receiver-auth.ts",
     "check:receiver-http": "tsx src/scripts/check-receiver-http.ts",
     "check:receiver-result": "tsx src/scripts/check-receiver-result.ts",
-    "test:receiver": "npm run check:receiver-auth && npm run check:receiver-http && npm run check:receiver-result"
+    "test:receiver": "npm run check:receiver-auth && npm run check:receiver-http && npm run check:receiver-result && npm run check:receiver-origin",
+    "check:readiness-overload": "tsx src/scripts/check-readiness-overload.ts",
+    "check:receiver-origin": "tsx src/scripts/check-receiver-origin.ts"
   },
   "keywords": [],
   "author": "",

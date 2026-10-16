@@ -10,6 +10,7 @@ import ingestionRouter from "./routes/ingestion.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import { requestId } from "./middleware/request-id.js";
 import type { RequestHandler } from "express";
+import { createConcurrencyGate } from "./services/concurrency-gate.js";
 
 const app = express();
 
@@ -32,11 +33,25 @@ app.get("/live", (_req, res) => {
   });
 });
 
+const readinessGate = createConcurrencyGate(1);
+
 const readiness: RequestHandler = async (_req, res) => {
   res.setHeader("Cache-Control", "no-store");
 
   try {
-    await pool.query("SELECT 1");
+    const attempt = await readinessGate.run(() =>
+      pool.query("SELECT 1"),
+    );
+
+    if (!attempt.accepted) {
+      res.setHeader("Retry-After", "2");
+      res.status(503).json({
+        status: "error",
+        service: "offline-upi-system",
+        database: "check_busy",
+      });
+      return;
+    }
 
     res.status(200).json({
       status: "ok",

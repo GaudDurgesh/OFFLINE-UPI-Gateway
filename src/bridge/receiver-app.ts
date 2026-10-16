@@ -43,6 +43,24 @@ export function createReceiverApp(
         });
     });
 
+    // Applies to packet submission and packet-result lookup.
+    // Browser requests must originate from this receiver's own page.
+    // CLI clients may omit Fetch Metadata headers; authentication still applies.
+    app.use("/packets", (req, res, next) => {
+        res.vary("Sec-Fetch-Site");
+
+        const site = req.get("sec-fetch-site");
+
+        if (site !== undefined && site !== "same-origin") {
+            res.status(403).json({
+                error: "CROSS_ORIGIN_REQUEST_BLOCKED",
+            });
+            return;
+        }
+
+        next();
+    });
+
     app.post(
         "/packets",
         rateLimit({

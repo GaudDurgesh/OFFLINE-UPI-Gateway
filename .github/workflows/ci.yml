@@ -94,6 +94,9 @@ jobs:
       - name: Generate temporary server keys
         run: npm run keys:generate
 
+      - name: Check readiness overload protection
+        run: npm run check:readiness-overload
+
       - name: Set up fresh test database
         run: npm run db:setup
 
