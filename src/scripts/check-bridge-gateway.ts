@@ -230,7 +230,9 @@ async function checkBridgeGateway() {
                     "tsx",
                     resolve("src/scripts/bridge-run.ts"),
                     simulateOutage ? proxyOrigin : origin,
-                    credentialFile,
+                    simulateOutage
+                        ? credentialFile
+                        : join(root, "direct-credentials.json"),
                 ],
                 {
                     env: { ...process.env, BRIDGE_DATA_DIR: directory },
@@ -399,6 +401,16 @@ async function checkBridgeGateway() {
                 bridgeId,
                 apiKey,
                 gatewayOrigin: proxyOrigin,
+            }),
+            { flag: "wx", mode: 0o600 },
+        );
+
+        await writeFile(
+            join(root, "direct-credentials.json"),
+            JSON.stringify({
+                bridgeId,
+                apiKey,
+                gatewayOrigin: origin,
             }),
             { flag: "wx", mode: 0o600 },
         );
