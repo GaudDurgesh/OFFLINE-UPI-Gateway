@@ -395,7 +395,11 @@ async function checkBridgeGateway() {
 
         await writeFile(
             credentialFile,
-            JSON.stringify({ bridgeId, apiKey }),
+            JSON.stringify({
+                bridgeId,
+                apiKey,
+                gatewayOrigin: proxyOrigin,
+            }),
             { flag: "wx", mode: 0o600 },
         );
 

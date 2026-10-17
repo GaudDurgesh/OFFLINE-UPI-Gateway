@@ -128,11 +128,6 @@ async function checkBridgeRunner() {
   }
 
   try {
-    await writeFile(
-      credentialFile,
-      JSON.stringify({ apiKey }),
-      { flag: "wx", mode: 0o600 },
-    );
 
     const firstPacket = makePacket(21);
     const secondPacket = makePacket(22);
@@ -154,6 +149,12 @@ async function checkBridgeRunner() {
     const address = server.address();
     assert.ok(address && typeof address !== "string");
     const origin = `http://127.0.0.1:${address.port}`;
+
+    await writeFile(
+      credentialFile,
+      JSON.stringify({ apiKey, gatewayOrigin: origin }),
+      { flag: "wx", mode: 0o600 },
+    );
 
     stage = "runner startup";
     const active = startRunner(queueDirectory, origin, credentialFile);

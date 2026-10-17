@@ -1,7 +1,12 @@
 import { open } from "node:fs/promises";
 import { isBridgeKey } from "../crypto/bridge-keys.js";
+import { validateGatewayOrigin } from "./gateway-origin.js";
 
-export async function readApiKey(filename: string): Promise<string> {
+export async function readApiKey(
+    filename: string,
+    requestedOrigin: string,
+): Promise<string> {
+    const destination = validateGatewayOrigin(requestedOrigin);
     const file = await open(filename, "r");
 
     try {
@@ -47,6 +52,18 @@ export async function readApiKey(filename: string): Promise<string> {
             !isBridgeKey(credentials.apiKey)
         ) {
             throw new Error("Invalid bridge credential.");
+        }
+
+        if (!("gatewayOrigin" in credentials)) {
+            throw new Error("Bridge credential has no approved gateway origin.");
+        }
+
+        const approvedOrigin = validateGatewayOrigin(
+            credentials.gatewayOrigin,
+        );
+
+        if (approvedOrigin !== destination) {
+            throw new Error("Bridge credential is not approved for this gateway.");
         }
 
         return credentials.apiKey;

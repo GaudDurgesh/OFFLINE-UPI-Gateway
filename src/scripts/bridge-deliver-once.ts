@@ -1,4 +1,4 @@
-import {readApiKey} from "../bridge/credentials.js"
+import { readApiKey } from "../bridge/credentials.js"
 import { BridgeOutbox } from "../bridge/outbox.js";
 import { createGatewayClient } from "../bridge/gateway-client.js";
 import { createDeliveryWorker } from "../bridge/delivery-worker.js";
@@ -21,7 +21,7 @@ async function deliverOnce() {
     throw new Error("Bridge data directory cannot be empty.");
   }
 
-  const apiKey = await readApiKey(args[1]);
+  const apiKey = await readApiKey(args[1], args[0]);
 
   const deliver = createGatewayClient({
     gatewayOrigin: args[0],

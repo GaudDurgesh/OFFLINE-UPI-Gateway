@@ -104,11 +104,6 @@ async function checkBridgeCli() {
     });
 
     try {
-        await writeFile(
-            credentialFile,
-            JSON.stringify({ apiKey }),
-            { flag: "wx", mode: 0o600 },
-        );
         await writeFile(packetFile, JSON.stringify(packet));
 
         await new Promise<void>((resolveReady, reject) => {
@@ -120,6 +115,13 @@ async function checkBridgeCli() {
         assert.ok(address && typeof address !== "string");
 
         const origin = `http://127.0.0.1:${address.port}`;
+
+        await writeFile(
+            credentialFile,
+            JSON.stringify({ apiKey, gatewayOrigin: origin }),
+            { flag: "wx", mode: 0o600 },
+        );
+
         const deliveryArgs = [origin, credentialFile];
         const mainQueue = join(root, "main");
 

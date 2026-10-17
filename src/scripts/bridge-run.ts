@@ -25,7 +25,7 @@ async function runBridge() {
     throw new Error("Bridge data directory cannot be empty.");
   }
 
-  const apiKey = await readApiKey(args[1]);
+  const apiKey = await readApiKey(args[1], args[0]);
 
   const deliver = createGatewayClient({
     gatewayOrigin: args[0],
