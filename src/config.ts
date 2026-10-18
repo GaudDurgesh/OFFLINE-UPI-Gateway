@@ -31,6 +31,12 @@ const envSchema = z.object({
         .max(168)
         .default(24),
 
+    ARCJET_MODE: z
+        .enum(["OFF", "DRY_RUN", "LIVE"])
+        .default("OFF"),
+
+    ARCJET_KEY: z.string().trim().min(1).max(256).optional(),
+
     PORT: z.coerce.number().int().min(1).max(65535).default(8080),
 
     NODE_ENV: z
@@ -47,6 +53,16 @@ if (!result.success) {
         console.error(`- ${issue.path.join(".")}: ${issue.message}`);
     }
 
+    process.exit(1);
+}
+
+if (
+    result.data.ARCJET_MODE !== "OFF" &&
+    !result.data.ARCJET_KEY
+) {
+    console.error(
+        "ARCJET_KEY is required when ARCJET_MODE is enabled.",
+    );
     process.exit(1);
 }
 

@@ -11,6 +11,10 @@ import { errorHandler } from "./middleware/error-handler.js";
 import { requestId } from "./middleware/request-id.js";
 import type { RequestHandler } from "express";
 import { createConcurrencyGate } from "./services/concurrency-gate.js";
+import { config } from "./config.js";
+import { createArcjetCheck } from "./services/arcjet-protection.js";
+import { createGatewayProtection } from "./middleware/gateway-protection.js";
+
 
 const app = express();
 
@@ -24,6 +28,16 @@ app.use("/api/bridge", (_req, res, next) => {
 });
 
 app.use("/api/bridge", bridgeIpLimiter);
+
+const arcjetCheck = createArcjetCheck(
+  config.ARCJET_MODE,
+  config.ARCJET_KEY,
+);
+
+app.use(
+  "/api/bridge",
+  createGatewayProtection(config.ARCJET_MODE, arcjetCheck),
+);
 
 app.get("/live", (_req, res) => {
   res.setHeader("Cache-Control", "no-store");

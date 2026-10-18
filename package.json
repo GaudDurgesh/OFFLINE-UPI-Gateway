@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "test": "npm run typecheck && npm run check:signatures && npm run check:payment && npm run check:concurrency-gate && npm run check:http-errors",
+    "test": "npm run typecheck && npm run check:signatures && npm run check:payment && npm run check:concurrency-gate && npm run check:http-errors && npm run check:gateway-protection && npm run check:arcjet-protection",
     "dev": "node --env-file=.env.runtime --import tsx --watch src/server.ts",
     "build": "tsc",
     "start": "node --env-file=.env.runtime dist/server.js",
@@ -72,7 +72,9 @@
     "check:receiver-boundary": "tsx src/scripts/check-receiver-boundary.ts",
     "check:credential-binding": "tsx src/scripts/check-credential-binding.ts",
     "bridge:bind": "tsx src/scripts/bind-bridge-credential.ts",
-    "check:credential-bind-cli": "tsx src/scripts/check-credential-bind-cli.ts"
+    "check:credential-bind-cli": "tsx src/scripts/check-credential-bind-cli.ts",
+    "check:gateway-protection": "tsx src/scripts/check-gateway-protection.ts",
+    "check:arcjet-protection": "tsx src/scripts/check-arcjet-protection.ts"
   },
   "keywords": [],
   "author": "",
@@ -80,6 +82,7 @@
   "type": "module",
   "private": true,
   "dependencies": {
+    "@arcjet/node": "1.14.1",
     "dotenv": "^18.0.6",
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.1",
